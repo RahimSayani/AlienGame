@@ -14,6 +14,7 @@ import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.util.ArrayList;
 
+import javax.sound.sampled.AudioInputStream;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JLabel;
@@ -23,7 +24,7 @@ import javax.xml.stream.events.EndDocument;
 import javax.xml.stream.events.StartDocument;
 
 public class MyPanel extends JPanel implements KeyListener{
-
+	
 	// PANEL DIMENSIONS
 	private final int PANEL_WIDTH = 700;
 	private final int PANEL_HEIGHT = 1000;
@@ -42,6 +43,7 @@ public class MyPanel extends JPanel implements KeyListener{
 	// LABELS
 	private JLabel pauseLabel;
 	private JLabel resumeLabel; 
+	private JLabel endMessage;
 	private JLabel ammo;
 	private JLabel wave;
 	private JLabel kills;
@@ -59,6 +61,14 @@ public class MyPanel extends JPanel implements KeyListener{
 	private Image enemy;
 	private Image ammunition;
 	private Image skull;
+	private Image playerSymbol;
+	private Image booster;
+	private Image explosion;
+	private Image explosionFaded;
+	private Image whiteStar;
+	private Image blueStar;
+	private Image redStar;
+	private Image comet;
 	
 	// PLAYER VARIABLES
 	private int playerSpeed = 10;
@@ -85,11 +95,18 @@ public class MyPanel extends JPanel implements KeyListener{
 	private int enemySpeed;
 	private int enemyWidth = 80;
 	private int enemyHeight = 45;
-	private int aliensOnEarth = 0;
+	private int aliensDead = 0;
 	
 	// EARTH VARIABLES
 	private int earthStart = 835;
 	private int earthHealth = 100;
+	
+	// BOOST VARIABLES
+	private boolean isBoostAvailable = true;
+	private boolean isBoosting = false;
+	private int boostMeter = 100;
+	
+	
 	
 	public MyPanel() {
 		
@@ -112,8 +129,9 @@ public class MyPanel extends JPanel implements KeyListener{
 					gameOver.setVisible(false);
 					difficultyButton.setVisible(false);
 					quitButton.setVisible(false);
+					endMessage.setVisible(false);
 					if (difficulty == 0) {
-						enemySpeed = 5;
+						enemySpeed = 7;
 						enemySpawnAreaMultiplier = 7;
 					}
 					else if (difficulty == 1) {
@@ -125,6 +143,11 @@ public class MyPanel extends JPanel implements KeyListener{
 						enemySpawnAreaMultiplier = 2;
 					}
 					setEnemyPosition();
+					earthHealth = 100;
+					playerHealth = 100;
+					player.setKills(0);
+					aliensDead = 0;
+					kills.setText(player.getKills() + "");
 				}				
 			}
 		});
@@ -135,7 +158,7 @@ public class MyPanel extends JPanel implements KeyListener{
 		difficultyButton.setFocusable(false);
 		difficultyButton.setBackground(Color.black);
 		difficultyButton.setForeground(Color.WHITE);
-		difficultyButton.setBounds((PANEL_WIDTH / 2) - 75, PANEL_HEIGHT - 630, 150, 35);
+		difficultyButton.setBounds((PANEL_WIDTH / 2) - 70, PANEL_HEIGHT - 630, 140, 35);
 		difficultyButton.setVisible(true);
 		difficultyButton.addActionListener(new ActionListener() {
 		
@@ -204,9 +227,15 @@ public class MyPanel extends JPanel implements KeyListener{
 		
 		gameOver = new JLabel();
 		gameOver.setForeground(Color.RED);
-		gameOver.setFont(new Font("Calibri", Font.BOLD, 30));
-		gameOver.setBounds(300, PANEL_HEIGHT / 2, 150, 50);
-		gameOver.setVisible(false);
+		gameOver.setFont(new Font("Calibri", Font.BOLD, 50));
+		gameOver.setBounds(265, 200, 200, 60);
+		gameOver.setVisible(true);
+		
+		endMessage = new JLabel();
+		endMessage.setForeground(Color.white);
+		endMessage.setFont(new Font("Calibri", Font.BOLD, 25));
+		endMessage.setBounds(250, 260, 250, 30);
+		endMessage.setVisible(false);
 		
 		// PANEL INSTANTIATION
 		this.setPreferredSize(new Dimension(PANEL_WIDTH, PANEL_HEIGHT));
@@ -220,10 +249,10 @@ public class MyPanel extends JPanel implements KeyListener{
 		this.add(startButton);
 		this.add(difficultyButton);
 		this.add(quitButton);
+		this.add(endMessage);
 		this.setLayout(new BorderLayout());
 		this.addKeyListener(this);
 		this.setFocusable(true);
-		if (playable) {this.setVisible(true);}
 		
 		// PLAYER - BULLET - ENEMY INSTANTIATION
 		player = new Player((PANEL_WIDTH / 2) - (playerWidth / 2), (PANEL_HEIGHT - 300), 0, 0); // int x, y, xVel, yVel
@@ -245,12 +274,21 @@ public class MyPanel extends JPanel implements KeyListener{
 		enemy = new ImageIcon("enemy.png").getImage();
 		ammunition = new ImageIcon("ammo2.png").getImage(); 
 		skull = new ImageIcon("skull2.png").getImage();
+		whiteStar = new ImageIcon("whitestar.png").getImage();
+		blueStar = new ImageIcon("blueStar3.png").getImage(); 
+		comet = new ImageIcon("comet.png").getImage();
+		playerSymbol = new ImageIcon("player3.png").getImage();
+		booster = new ImageIcon("booster3.png").getImage();
+		explosion = new ImageIcon("explosion2.png").getImage(); 
+		explosionFaded = new ImageIcon("explosion2faded2.png").getImage(); 
+
 		
 		// TIMER 
 		timer = new javax.swing.Timer(16, new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				if (playable) {
+					booster();
 					bulletsFiring();
 					collisionDetection();
 					successCheck();
@@ -262,17 +300,51 @@ public class MyPanel extends JPanel implements KeyListener{
 		timer.start();
 	}
 	
+	public void booster() {
+		if (isBoosting && isBoostAvailable && boostMeter != 0) {
+			boostMeter--;
+			if (boostMeter == 0) {
+				isBoostAvailable = false;
+				System.out.println("boost depleted!");
+			}
+		}
+		if (!isBoostAvailable) {
+			boostMeter++;
+			if (boostMeter == 100) {
+				isBoostAvailable = true;
+				System.out.println("boost ready!");
+			}
+		}
+		if (!isBoosting && boostMeter < 100 && boostMeter > 0 && isBoostAvailable) {
+			boostMeter++;
+		}
+		if (isBoosting && isBoostAvailable) {
+			if ((player.getxVel() < 0 && player.getxVel() > -playerSpeed * 2) || (player.getxVel() > 0 && player.getxVel() < playerSpeed * 2)) {player.setxVel(player.getxVel() * 2);}
+			if ((player.getyVel() < 0 && player.getyVel() > -playerSpeed * 2) || (player.getyVel() > 0 && player.getyVel() < playerSpeed * 2)) {player.setyVel(player.getyVel() * 2);}
+		}
+		if ((isBoosting && !isBoostAvailable) || (!isBoosting && boostMeter < 100 && boostMeter > 0)) {
+			if (player.getxVel() != 0 && !(player.getxVel() == playerSpeed || player.getxVel() == -playerSpeed)) {player.setxVel(player.getxVel() / 2);}
+			if (player.getyVel() != 0 && !(player.getyVel() == playerSpeed || player.getyVel() == -playerSpeed)) {player.setyVel(player.getyVel() /2 );}
+		}
+	}
+	
 	public void successCheck() {
-		if (player.getKills() + aliensOnEarth == numAliens) {
+		if (aliensDead == numAliens) {
 			playable = false;
 			for (int i = 0; i < numBullets; i++) {
 				bullets[i].reset();
 			}
+			for (int i = 0; i < numAliens; i++) {
+				enemies[i].reset();
+			}
 			gameOver.setText("SUCCESS");
 			gameOver.setVisible(true);
+			startButton.setText("RESTART");
 			startButton.setVisible(true);
 			difficultyButton.setVisible(true);
 			quitButton.setVisible(true);
+			endMessage.setText("you defended earth");
+			endMessage.setVisible(true);
 		}
 	}
 	
@@ -287,12 +359,13 @@ public class MyPanel extends JPanel implements KeyListener{
 			}
 			gameOver.setText("FAILURE");
 			gameOver.setVisible(true);
-			startButton.setText("RETRY");
+			startButton.setText("RESTART");
 			startButton.setVisible(true);
 			difficultyButton.setVisible(true);
 			quitButton.setVisible(true);
-			earthHealth = 100;
-			playerHealth = 100;
+			if (earthHealth == 0) {endMessage.setText(" earth was invaded");}
+			else {endMessage.setText("          you died");}
+			endMessage.setVisible(true);
 		}
 	}
 
@@ -383,7 +456,7 @@ public class MyPanel extends JPanel implements KeyListener{
 		for (int j = 0; j < enemies.length; j++) {
 			
 			// earth
-			if (enemies[j].getY() >= PANEL_HEIGHT) {enemies[j].reset(); earthHealth -= 10; aliensOnEarth++; System.out.println("Alien collided with Earth.		Earth Health: " + earthHealth + "%");}
+			if (enemies[j].getY() >= PANEL_HEIGHT) {enemies[j].reset(); earthHealth -= 5; aliensDead++;}
 			
 			int enemyX = enemies[j].getX();
 			int enemyY = enemies[j].getY();
@@ -397,7 +470,10 @@ public class MyPanel extends JPanel implements KeyListener{
 						enemyX = enemies[j].getX();
 						enemyY = enemies[j].getY();
 						if (bulletY < enemyY + enemyHeight && bulletY > enemyY && bulletX < enemyX + enemyWidth && bulletX > enemyX) {
-							enemies[j].reset();
+							enemies[j].setJustKilled(true);
+							enemies[j].setExplosionX(enemies[j].getX());
+							enemies[j].setExplosionY(enemies[j].getY());
+							aliensDead++;
 							bullets[i].reset();
 							player.addKill();
 							kills.setText(player.getKills() + "");
@@ -414,10 +490,9 @@ public class MyPanel extends JPanel implements KeyListener{
 						
 			if (((topY && leftX) || (topY && rightX) || (bottomY && leftX) || (bottomY && rightX)) && collision) {
 				enemies[j].reset();
-				enemies[j].setDead(true);
+				aliensDead++;
 				playerHealth -= 10;
 				player.addKill();
-				System.out.println("Player collided with Alien.		Player Health: " + playerHealth + "%");
 			}
 		}
 	}
@@ -426,7 +501,9 @@ public class MyPanel extends JPanel implements KeyListener{
 		super.paint(g);
 		Graphics2D graphics2d = (Graphics2D) g;
 		
-		// PAINT BULLETS
+		//graphics2d.drawImage(whiteStar, 100, 100, null);
+		
+		// BULLETS
 		graphics2d.setPaint(Color.GREEN);
 		for (int i = 0; i < 32; i++) {
 			if (bullets[i].isFired()) {
@@ -440,34 +517,68 @@ public class MyPanel extends JPanel implements KeyListener{
 			graphics2d.fillRect(bullets[i].getX(), bullets[i].getY(), bulletWidth, bulletLength);
 		}
 		
-		// PAINT ALIENS
+		// ALIENS
 		for (int i = 0; i < enemies.length; i++) {
+			
 			if (enemies[i].isQueued()) {
-				enemies[i].setQueued(false);
-				enemies[i].setMoving(true);
-			}
-			if (enemies[i].isMoving()) {
 				enemies[i].setyVel(enemySpeed);
 				enemies[i].setY(enemies[i].getY() + enemies[i].getyVel());
 			}
+			
+			if (enemies[i].isJustKilled()) {
+				enemies[i].reset();
+				
+				if (enemies[i].getKillTimer() > 15) {
+					//graphics2d.drawImage(explosion, enemies[i].getExplosionX(), enemies[i].getExplosionY(), null);
+				}
+				else {
+					//graphics2d.drawImage(explosionFaded, enemies[i].getExplosionX(), enemies[i].getExplosionY(), null);
+				}
+				enemies[i].setKillTimer(enemies[i].getKillTimer() - 1);
+				if (enemies[i].getKillTimer() == 0) {
+					enemies[i].setJustKilled(false);
+				}
+			}
+			
 			//graphics2d.fillRect(enemies[i].getX(), enemies[i].getY(), enemyWidth, enemyHeight);
-			graphics2d.drawImage(enemy, enemies[i].getX(), enemies[i].getY(), null);
+			graphics2d.drawImage(enemy, enemies[i].getX(), enemies[i].getY(), null);	
 		}
 		
-		// PAINT PLAYER
+		// PLAYER
 		//graphics2d.fillRect(player.getX() + player.getxVel(), player.getY() + player.getyVel(), playerWidth, playerHeight);
 		graphics2d.drawImage(spaceship, player.getX() + player.getxVel(), player.getY() + player.getyVel(), null);
 		player.update();
 		
-		// PAINT EARTH
+		// EARTH
 		//graphics2d.fillRect(0, earthStart, earthWidth, PANEL_HEIGHT - 835);
 		graphics2d.drawImage(earth, 0, 700, null);
 		
-		// PAINT SKULL
+		// SKULL
 		graphics2d.drawImage(skull, 635, 35, null);
 		
-		// PAINT AMMO
+		// AMMO
 		graphics2d.drawImage(ammunition, 635, 0, null);
+		
+		// PLAYER HEALTH
+		graphics2d.setPaint(Color.DARK_GRAY);
+		graphics2d.drawImage(playerSymbol, 2, 2, null);
+		graphics2d.fillRect(45, 10, 300, 10);
+		graphics2d.setPaint(Color.red);
+		graphics2d.fillRect(45, 10, playerHealth * 3, 10);
+		
+		// EARTH HEALTH
+		graphics2d.setPaint(Color.DARK_GRAY);
+		graphics2d.fillRect(50, PANEL_HEIGHT - 20, 602, 17);
+		graphics2d.setPaint(Color.GREEN);
+		graphics2d.fillRect(50, PANEL_HEIGHT - 20, earthHealth * 6, 15);
+		
+		// BOOST METER
+		graphics2d.setPaint(Color.DARK_GRAY);
+		graphics2d.drawImage(booster, 2, 40, null);
+		graphics2d.fillRect(45, 40, 300, 10);
+		graphics2d.setPaint(Color.CYAN);
+		graphics2d.fillRect(45, 40, boostMeter * 3, 10);
+		
 	}
 	
 	@Override
@@ -491,10 +602,16 @@ public class MyPanel extends JPanel implements KeyListener{
 			if(firing) {firing = false;}
 			else {firing = true;}
 		}
+		
+		if (e.getKeyCode() == 16) {
+			if (!isBoosting) {isBoosting = true;}
+			else {
+				isBoosting = false;
+			}
+		}
 		repaint();
 		}
 	}
-	
 	
 	@Override
 	public void keyTyped(KeyEvent e) {
@@ -502,7 +619,6 @@ public class MyPanel extends JPanel implements KeyListener{
 		
 	}
 
-	
 	@Override
 	public void keyReleased(KeyEvent e) {
 		// TODO Auto-generated method stub
